@@ -10,3 +10,6 @@ psql -v ON_ERROR_STOP=1 --username "postgres" --dbname "$POSTGRESQL_DATABASE" <<
     CREATE EXTENSION "uuid-ossp";
 
 EOSQL
+
+psql --set=PG_WRITE_USER="$POSTGRESQL_USERNAME" -v ON_ERROR_STOP=1 --username "postgres" --dbname "$POSTGRESQL_DATABASE" -f /tmp/setup.sql
+
