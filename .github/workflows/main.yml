@@ -3,6 +3,8 @@ name: ch.oereb-database
 on:
   workflow_dispatch:
   push:
+    paths-ignore:
+      - '**.md'
   pull_request:
 
 defaults:
@@ -12,7 +14,7 @@ defaults:
 jobs:
 
   make-docker-image:
-    name: Build docker image for oereb db
+    name: Build docker image
 
     env:
       DOCKER_ACCOUNT: edigonzales
