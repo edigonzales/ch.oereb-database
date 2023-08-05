@@ -33,7 +33,7 @@ export ORG_GRADLE_PROJECT_geoservicesUrl=https://geo.so.ch/wms/oereb
 ```
 
 ```
-./start-gretl.sh --docker-image sogis/gretl:latest --docker-network gretl_default --job-directory $PWD/so/oereb_av tasks --all
+./start-gretl.sh --docker-image sogis/gretl:latest --docker-network gretl_default --job-directory $PWD/so/ tasks --all
 
 ```
 

@@ -1,10 +1,20 @@
 task importAllData() {
     group = "__Main-Job__"
     description = "Aggregationstask für Import sämtlicher Daten"
+    /*
     dependsOn ":oereb_av:importData", 
         ":oereb_plzo:importData",
         ":oereb_bundesgesetze:importData",
         ":oereb_bundeskonfiguration:importData",
         ":oereb_kantonskonfiguration:importData",
+
+        ":oereb_nutzungsplanung:importData"
+    */
+
+    dependsOn ":oereb_plzo:importData",
+        ":oereb_bundesgesetze:importData",
+        ":oereb_bundeskonfiguration:importData",
+        ":oereb_kantonskonfiguration:importData",
+
         ":oereb_nutzungsplanung:importData"
 }
