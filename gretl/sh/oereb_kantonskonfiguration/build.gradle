@@ -1,0 +1,59 @@
+apply plugin: "de.undercouch.download"
+apply plugin: "ch.so.agi.gretl"
+
+import ch.so.agi.gretl.api.TransferSet
+import ch.so.agi.gretl.tasks.*
+import java.nio.file.Paths
+import de.undercouch.gradle.tasks.download.Download
+
+def GROUP = "Kantonskonfiguration-Import"
+
+def dbSchemas = ["live_sh"]
+
+def pathToTempFolder = System.getProperty("java.io.tmpdir")
+
+def iliModelKonfiguration = "OeREBKRMkvs_V2_0"
+
+def dataFileName = "ch.sh.OeREBKRM_V2_0.xml"
+def dataSetName = "konfiguration"
+
+def baseUrl = "https://raw.githubusercontent.com/openoereb/ch.sh.oereb_base/master/"
+
+defaultTasks "importData"
+
+task downloadData(type: Download) {
+    group = GROUP
+    doFirst {
+        println baseUrl + dataFileName
+    }
+    src baseUrl + dataFileName
+    dest pathToTempFolder
+    overwrite true
+}
+
+dbSchemas.each { dbSchema ->
+    def schema = dbSchema.toString()
+
+    task "importData_$schema"(type: Ili2pgReplace, dependsOn: "downloadData") {
+        group = GROUP
+        description = "Import zuständige, kantonale Stellen in das Schema $schema"
+        database = [dbUriOerebV2, dbUserOerebV2, dbPwdOerebV2]
+        dbschema = schema
+        dataset = dataSetName
+        models = iliModelKonfiguration
+        dataFile = file(Paths.get(pathToTempFolder.toString(), dataFileName))
+        importBid = true
+        importTid = true
+    }
+}
+
+task importData() {
+    group = GROUP
+    description = "Importiert sämtliche notwendigen kantonalen Konfigurationen, Gesetze, Logos, Texte etc."
+
+    dependsOn {
+        tasks.findAll { task -> task.name.startsWith('importData_') }
+    }    
+
+    mustRunAfter ":oereb_bundeskonfiguration:importData"    
+}

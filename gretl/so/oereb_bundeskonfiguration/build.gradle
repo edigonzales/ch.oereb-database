@@ -1,0 +1,146 @@
+apply plugin: "de.undercouch.download"
+apply plugin: "ch.so.agi.gretl"
+
+import ch.so.agi.gretl.api.TransferSet
+import ch.so.agi.gretl.tasks.*
+import java.nio.file.Paths
+import de.undercouch.gradle.tasks.download.Download
+
+def GROUP = "Bundeskonfiguration-Import"
+
+def dbSchemas = ["live_so"]
+
+def pathToTempFolder = System.getProperty("java.io.tmpdir")
+
+def iliModelKonfiguration = "OeREBKRMkvs_V2_0"
+
+def federalThemesDataFile = "OeREBKRM_V2_0_Themen.xml"
+def federalThemesDataSet = "ch.admin.v_d.oereb_themen"
+def federalLogosDataFile = "OeREBKRM_V2_0_Logos.xml"
+def federalLogosDataSet = "ch.admin.v_d.oereb_logo"
+def federalTextDataFile = "OeREBKRM_V2_0_Texte.xml"
+def federalTextDataSet = "ch.admin.v_d.oereb_text"
+
+def federalConfigurationBaseUrl = "https://models.geo.admin.ch/V_D/OeREB/"
+
+defaultTasks "importBundeskonfiguration"
+
+task downloadFederalThemes(type: Download) {
+    group = GROUP
+    doFirst {
+        println federalConfigurationBaseUrl + federalThemesDataFile
+    }
+    description = "Download Bundesthemen."
+    src federalConfigurationBaseUrl + federalThemesDataFile
+    dest pathToTempFolder
+    overwrite true
+}
+
+// see https://github.com/claeis/ili2db/issues/450
+// Scheint hier zu funktionieren.
+dbSchemas.each { dbSchema ->
+    def schema = dbSchema.toString()
+    task "importFederalThemes_$schema"(type: Ili2pgUpdate, dependsOn: "downloadFederalThemes") {
+        group = GROUP
+        description = "Import Bundeskonfiguration in das $schema Schema"
+        database = [dbUriOerebV2, dbUserOerebV2, dbPwdOerebV2]
+        dbschema = schema
+        dataset = federalThemesDataSet
+        models = iliModelKonfiguration
+        disableValidation = false
+        dataFile = file(Paths.get(pathToTempFolder.toString(), federalThemesDataFile))
+        importBid = true
+        importTid = true
+    }
+}
+
+task importFederalThemes() {
+    group = GROUP
+    description = "Aggregationstask für Import Bundeskonfiguration."
+
+    dependsOn {
+        tasks.findAll { task -> task.name.startsWith('importFederalThemes_') }
+    }    
+}
+
+task downloadFederalLogos(type: Download) {
+    group = GROUP
+    doFirst {
+        println federalConfigurationBaseUrl + federalLogosDataFile
+    }
+    description = "Download Bundeslogos."
+    src federalConfigurationBaseUrl + federalLogosDataFile
+    dest pathToTempFolder
+    overwrite true
+}
+
+// Im Gegensatz zu den Themen kann "Replace" verwendet werden.
+dbSchemas.each { dbSchema ->
+    def schema = dbSchema.toString()
+    task "importFederalLogos_$schema"(type: Ili2pgReplace, dependsOn: "downloadFederalLogos") {
+        group = GROUP
+        description = "Import Bundesthemen in das $schema Schema"
+        database = [dbUriOerebV2, dbUserOerebV2, dbPwdOerebV2]
+        dbschema = schema
+        dataset = federalLogosDataSet
+        models = iliModelKonfiguration
+        disableValidation = false
+        dataFile = file(Paths.get(pathToTempFolder.toString(), federalLogosDataFile))
+        importBid = true
+        importTid = true
+    }
+}
+
+task importFederalLogos() {
+    group = GROUP
+    description = "Aggregationstask für Import Bundeslogos."
+    mustRunAfter "importFederalThemes"
+
+    dependsOn {
+        tasks.findAll { task -> task.name.startsWith('importFederalLogos_') }
+    }    
+}
+
+task downloadFederalText(type: Download) {
+    group = GROUP
+    doFirst {
+        println federalConfigurationBaseUrl + federalTextDataFile
+    }
+    description = "Download Bundestexte."
+    src federalConfigurationBaseUrl + federalTextDataFile
+    dest pathToTempFolder
+    overwrite true
+}
+
+dbSchemas.each { dbSchema ->
+    def schema = dbSchema.toString()
+    task "importFederalText_$schema"(type: Ili2pgReplace, dependsOn: "downloadFederalText") {
+        group = GROUP
+        description = "Import Bundestexte in das $schema Schema"
+        database = [dbUriOerebV2, dbUserOerebV2, dbPwdOerebV2]
+        dbschema = schema
+        dataset = federalTextDataSet
+        models = iliModelKonfiguration
+        disableValidation = false
+        dataFile = file(Paths.get(pathToTempFolder.toString(), federalTextDataFile))
+        importBid = true
+        importTid = true
+    }
+}
+
+task importFederalText() {
+    group = GROUP
+    description = "Aggregationstask für Import Bundestexte."
+    mustRunAfter "importFederalLogos"
+
+    dependsOn {
+        tasks.findAll { task -> task.name.startsWith('importFederalText_') }
+    }    
+}
+
+task importData {
+    group = GROUP
+    description = "Import alle Bundeskonfigurations-Daten."
+    dependsOn "importFederalThemes", "importFederalLogos", "importFederalText"
+    mustRunAfter ":oereb_bundesgesetze:importData"         
+}

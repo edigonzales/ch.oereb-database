@@ -1,0 +1,60 @@
+apply plugin: "de.undercouch.download"
+apply plugin: "ch.so.agi.gretl"
+
+import ch.so.agi.gretl.api.TransferSet
+import ch.so.agi.gretl.tasks.*
+import java.nio.file.Paths
+import de.undercouch.gradle.tasks.download.Download
+
+def GROUP = "NPL-Import"
+
+def dbSchemas = ["live_sh"]
+
+def pathToTempFolder = System.getProperty("java.io.tmpdir")
+
+def iliModelTransferstruktur = "OeREBKRMtrsfr_V2_0"
+
+def dataFileName = "ch.Nutzungsplanung-Nutzungsplanung_V1_2-ch.2939.Nutzungsplanung.OeREBKRMtrsfr_V2_0.xtf"
+def dataSetName = "ch.2939.Nutzungsplanung"
+
+def baseUrl = "https://raw.githubusercontent.com/agiktsh/oereb-server.database/master/"
+
+defaultTasks "importData"
+
+task downloadData(type: Download) {
+    group = GROUP
+    doFirst {
+        println baseUrl + dataFileName
+    }
+    src baseUrl + dataFileName
+    dest pathToTempFolder
+    overwrite true
+}
+
+dbSchemas.each { dbSchema ->
+    def schema = dbSchema.toString()
+
+    task "importData_$schema"(type: Ili2pgReplace, dependsOn: "downloadData") {
+        group = GROUP
+        description = "Import zuständige, kantonale Stellen in das Schema $schema"
+        database = [dbUriOerebV2, dbUserOerebV2, dbPwdOerebV2]
+        dbschema = schema
+        dataset = dataSetName
+        models = iliModelTransferstruktur
+        dataFile = file(Paths.get(pathToTempFolder.toString(), dataFileName))
+        importBid = true
+        importTid = true
+        disableValidation = true
+    }
+}
+
+task importData() {
+    group = GROUP
+    description = "Importiert NPL."
+
+    dependsOn {
+        tasks.findAll { task -> task.name.startsWith('importData_') }
+    }    
+
+    mustRunAfter ":oereb_kantonskonfiguration:importData"    
+}

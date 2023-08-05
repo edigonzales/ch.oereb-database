@@ -1,18 +1,16 @@
 version: '3.9'
 services:
   oereb-db:
-    image: bitnami/postgresql:15.3.0
+    image: ghcr.io/edigonzales/oereb-database:2
     environment:
       POSTGRESQL_DATABASE: oereb
       POSTGRESQL_POSTGRES_PASSWORD: postgres
       POSTGRESQL_USERNAME: ddluser
       POSTGRESQL_PASSWORD: ddluser
-      PG_ROOT_PASSWORD: secret
     ports:
       - "54323:5432"
     volumes:
-      #- pgdata_oereb:/bitnami/postgresql/data
-      - ./setup.sql:/docker-entrypoint-initdb.d/20_setup.sql
+      - pgdata_oereb:/bitnami/postgresql:cached
 
 volumes:
   pgdata_oereb:

@@ -1,0 +1,102 @@
+import ch.so.agi.gretl.api.TransferSet
+import ch.so.agi.gretl.tasks.*
+import java.nio.file.Paths
+import de.undercouch.gradle.tasks.download.Download
+
+apply plugin: "de.undercouch.download"
+apply plugin: "ch.so.agi.gretl"
+
+def GROUP = "KbS-Import"
+
+def dbSchemas = ["live_so"]
+
+def pathToTempFolder = System.getProperty("java.io.tmpdir")
+def pathToUnzipFolder = Paths.get(pathToTempFolder, "unzip_data")
+
+def iliModelTransferstruktur = "OeREBKRMtrsfr_V2_0"
+def baseUrl = "https://s3.eu-central-1.amazonaws.com/ch.so.agi.geodata-test/"
+
+def oerebThemen = [
+    "ch.so.afu.oereb_kataster_belasteter_standorte_V2_0"
+]
+
+defaultTasks "importData"
+
+oerebThemen.each { oerebThema ->
+    def themaName = oerebThema.toString()
+
+    task "download_$themaName"(type: Download) {
+        group = GROUP
+        description = "Download KbS-Daten"
+        src baseUrl + themaName + "_xtf.zip"
+        dest pathToTempFolder
+        overwrite true
+    }
+
+    task "unzipData_$themaName"(type: Copy, dependsOn: "download_$themaName") {
+        group = GROUP
+        description = "Unzip zip file"
+        from zipTree(Paths.get(pathToTempFolder, themaName+"_xtf.zip"))
+        into file(pathToUnzipFolder)
+        //include "**/*.xtf"
+        /*
+        rename { String fileName ->
+            if (fileName.contains(themaName)) {
+                return themaName + ".xtf"
+            }
+            return fileName
+        }
+        */
+    }
+
+    task "replaceWmsServer_$themaName"(dependsOn: "unzipData_$themaName") {
+        group = GROUP
+        description = "Ersetzt verschiedene Elemente (Host, Pfad, etc.) der WMS-Requests."
+        doLast {
+            ant.replace(
+            file: file(Paths.get(pathToUnzipFolder.toString(), themaName + ".xtf")),
+            token: 'https://geo-t.so.ch/wms/oereb',
+            value: geoservicesUrl,
+            encoding: 'UTF-8')
+        }
+    }
+
+    dbSchemas.eachWithIndex { dbSchema, i ->
+        def schema = dbSchema.toString()
+        def taskIndex = i.toString()
+    
+        task "import_$themaName$schema"(type: Ili2pgReplace, dependsOn: "replaceWmsServer_$themaName") {
+            group = GROUP
+            description = "Import KbS in DB schema $schema"
+            database = [dbUriOerebV2, dbUserOerebV2, dbPwdOerebV2]
+            dbschema = schema
+            dataset = themaName
+            //importBid = true
+            importTid = true
+            models = iliModelTransferstruktur
+            dataFile = file(Paths.get(pathToUnzipFolder.toString(), themaName + ".xtf"))
+            disableValidation = false
+        }
+    }
+}
+
+task importData() {
+    group = GROUP
+    description = "Aggregationstask für Import KbS."
+
+    dependsOn {
+        tasks.findAll { task -> task.name.startsWith('import_') }
+    }    
+        
+    //finalizedBy 'refreshOerebWMSTablesLive'
+
+    mustRunAfter ":oereb_kantonskonfiguration:importData" 
+}
+
+task refreshOerebWMSTablesLive(type: SqlExecutor) {
+    group = GROUP
+    description = "Aktualisiert OEREB WMS Tabellen."
+    database = [dbUriOerebV2, dbUserOerebV2, dbPwdOerebV2]
+    sqlFiles = ["update_oerebwms_tables.sql"]
+    sqlParameters = [dbSchema: 'live_so']
+}

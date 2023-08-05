@@ -1,0 +1,63 @@
+apply plugin: "de.undercouch.download"
+apply plugin: "ch.so.agi.gretl"
+
+import ch.so.agi.gretl.api.*
+import ch.so.agi.gretl.tasks.*
+import java.nio.file.Paths
+import de.undercouch.gradle.tasks.download.Download
+
+defaultTasks "importData"
+
+def GROUP = "PLZ/Ortschaft-Import"
+
+def dbSchemas = ["live_sh"]
+
+def pathToTempFolder = System.getProperty("java.io.tmpdir")
+def pathToUnzipFolder = Paths.get(pathToTempFolder, 'unzip_data')
+def pathToDataZip = Paths.get(pathToTempFolder, "PLZO_INTERLIS_LV95.zip")
+def xtfFilePath = Paths.get(pathToUnzipFolder.toString(), 'PLZO_INTERLIS_LV95', 'PLZO_ITF_LV95.itf')
+
+task download(type: Download) {
+    group = GROUP
+    description = "Download plz_ortschaften from swisstopo"
+    doLast {
+        println "File downloaded to: " + pathToTempFolder
+    }
+    src 'http://data.geo.admin.ch/ch.swisstopo-vd.ortschaftenverzeichnis_plz/PLZO_INTERLIS_LV95.zip'
+    dest pathToTempFolder
+    overwrite true
+}
+
+task unzipData(type: Copy, dependsOn: 'download') {
+    group = GROUP
+    description = "Unzip PLZO_INTERLIS_LV95.zip."
+    doLast {
+        println "File unzipped to directory: " + pathToUnzipFolder
+    }
+    from zipTree(pathToDataZip)
+    into file(pathToUnzipFolder)
+    include "**/*.itf"
+}
+
+dbSchemas.each { dbSchema ->
+    task "importPLZO_$dbSchema"(type: Ili2pgReplace, dependsOn: "unzipData") {
+        group = GROUP
+        description = "Datenübertrag ins PLZO-Bundesmodell."    
+        database = [dbUriOerebV2, dbUserOerebV2, dbPwdOerebV2]
+        dbschema = dbSchema
+        models = "PLZOCH1LV95D"
+        dataFile = file(xtfFilePath)
+        dataset = "PLZO_INTERLIS_LV95"
+        disableValidation = true
+    }
+}
+
+task importData() {
+    group = GROUP
+    description = "Aggregationstask für das Importieren/Ersetzen der PLZ/Ortschaften."
+    dependsOn {
+        tasks.findAll { task -> task.name.startsWith('importPLZO_') }
+    }  
+
+    mustRunAfter ":oereb_av:importData"  
+}

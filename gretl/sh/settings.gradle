@@ -1,0 +1,7 @@
+include 'oereb_av'
+include 'oereb_plzo'
+include 'oereb_bundesgesetze'
+include 'oereb_bundeskonfiguration'
+include 'oereb_bundesdaten'
+include 'oereb_kantonskonfiguration'
+include 'oereb_nutzungsplanung'

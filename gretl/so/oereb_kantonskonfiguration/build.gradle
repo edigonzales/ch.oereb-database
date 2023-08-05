@@ -1,0 +1,310 @@
+apply plugin: "de.undercouch.download"
+apply plugin: "ch.so.agi.gretl"
+
+import ch.so.agi.gretl.api.TransferSet
+import ch.so.agi.gretl.tasks.*
+import java.nio.file.Paths
+import de.undercouch.gradle.tasks.download.Download
+
+def GROUP = "Kantonskonfiguration-Import"
+
+def dbSchemas = ["live_so"]
+
+def pathToTempFolder = System.getProperty("java.io.tmpdir")
+
+def iliModelBasis = "OeREBKRM_V2_0"
+def iliModelKonfiguration = "OeREBKRMkvs_V2_0"
+def iliModelTransferstruktur = "OeREBKRMtrsfr_V2_0"
+
+def responsibleOfficesDataFile = "ch.so.agi.oereb_zustaendigestellen_V2_0.xtf"
+def responsibleOfficesDataSet = "zustaendigestellen"
+def cantonalLegalBasisDataFile = "ch.so.sk.oereb_gesetze_V2_0.xtf"
+def cantonalLegalBasisDataSet = "gesetze"
+def cantonalThemesDataFile = "ch.so.agi.oereb_themen_V2_0.xtf"
+def cantonalThemesDataSet = "themen"
+def cantonalLogosDataFile = "ch.so.agi.oereb_logo_V2_0.xtf"
+def cantonalLogosDataSet = "logo"
+def cantonalTextDataFile = "ch.so.agi.oereb_text_V2_0.xtf"
+def cantonalTextDataSet = "text"
+def availabilityDataFile = "ch.so.agi.oereb_verfuegbarkeit_V2_0.xtf"
+def availabilityDataSet = "verfuegbarkeit"
+def subunitOfLandRegisterDataFile = "ch.so.agi.oereb_grundbuchkreis_V2_0.xtf"
+def subunitOfLandRegisterDataSet = "grundbuchkreis"
+
+def cantonalDataBaseUrl = "https://s3.eu-central-1.amazonaws.com/ch.so.agi.geodata-test/"
+
+defaultTasks "importKantonskonfiguration"
+
+// Kantonale zuständige Stellen
+task downloadResponsibleOfficesOereb(type: Download) {
+    group = GROUP
+    doFirst {
+        println cantonalDataBaseUrl + responsibleOfficesDataFile
+    }
+    description = "Download zuständige, kantonale Stellen."
+    src cantonalDataBaseUrl + responsibleOfficesDataFile
+    dest pathToTempFolder
+    overwrite true
+}
+
+dbSchemas.each { dbSchema ->
+    def schema = dbSchema.toString()
+
+    task "importResponsibleOffices_$schema"(type: Ili2pgReplace, dependsOn: "downloadResponsibleOfficesOereb") {
+        group = GROUP
+        description = "Import zuständige, kantonale Stellen in das Schema $schema"
+        database = [dbUriOerebV2, dbUserOerebV2, dbPwdOerebV2]
+        dbschema = schema
+        dataset = responsibleOfficesDataSet
+        models = iliModelBasis
+        dataFile = file(Paths.get(pathToTempFolder.toString(), responsibleOfficesDataFile))
+        importBid = true
+        importTid = true
+    }
+}
+
+task importResponsibleOffices() {
+    group = GROUP
+    description = "Import zuständige, kantonale Stellen in beide Schemas."
+
+    dependsOn {
+        tasks.findAll { task -> task.name.startsWith('importResponsibleOffices_') }
+    }    
+}
+
+// Kantonale Gesetze
+task downloadCantonalLegalBasis(type: Download) {
+    group = GROUP
+    doFirst {
+        println cantonalDataBaseUrl + cantonalLegalBasisDataFile
+    }
+    description = "Download kantonale Gesetze."
+    src cantonalDataBaseUrl + cantonalLegalBasisDataFile
+    dest pathToTempFolder
+    overwrite true
+}
+
+// FIXME: Bug (?) in ili2db bei Update
+dbSchemas.each { dbSchema ->
+    def schema = dbSchema.toString()
+    task "importCantonalLegalBasis_$schema"(type: Ili2pgReplace, dependsOn: "downloadCantonalLegalBasis") {
+        group = GROUP
+        description = "Import der kantonalen Gesetze in das $schema Schema"
+        database = [dbUriOerebV2, dbUserOerebV2, dbPwdOerebV2]
+        dbschema = schema
+        dataset = cantonalLegalBasisDataSet
+        models = iliModelBasis
+        dataFile = file(Paths.get(pathToTempFolder.toString(), cantonalLegalBasisDataFile))
+        disableValidation = true
+        importBid = true
+        importTid = true
+    }
+}
+
+task importCantonalLegalBasis() {
+    group = GROUP
+    description = "Aggregationstask für Import der kantonalen Gesetze."
+    mustRunAfter "importResponsibleOffices"
+
+    dependsOn {
+        tasks.findAll { task -> task.name.startsWith('importCantonalLegalBasis_') }
+    }    
+}
+
+// Kantonale Themen
+task downloadCantonalThemes(type: Download) {
+    group = GROUP
+    doFirst {
+        println cantonalDataBaseUrl + cantonalThemesDataFile
+    }
+    description = "Download kantonale Themen."
+    src cantonalDataBaseUrl + cantonalThemesDataFile
+    dest pathToTempFolder
+    overwrite true
+}
+
+dbSchemas.each { dbSchema ->
+    def schema = dbSchema.toString()
+    task "importCantonalThemes_$schema"(type: Ili2pgReplace, dependsOn: "downloadCantonalThemes") {
+        group = GROUP
+        description = "Import der kantonalen Themen in das $schema Schema"
+        database = [dbUriOerebV2, dbUserOerebV2, dbPwdOerebV2]
+        dbschema = schema
+        dataset = cantonalThemesDataSet
+        models = iliModelKonfiguration
+        dataFile = file(Paths.get(pathToTempFolder.toString(), cantonalThemesDataFile))
+        disableValidation = true
+        importBid = true
+        importTid = true
+    }
+}
+
+task importCantonalThemes() {
+    group = GROUP
+    description = "Aggregationstask für Import der kantonalen Themen."
+    mustRunAfter "importCantonalLegalBasis"
+
+    dependsOn {
+        tasks.findAll { task -> task.name.startsWith('importCantonalThemes_') }
+    }    
+}
+
+// Kantonale Logos
+task downloadCantonalLogos(type: Download) {
+    group = GROUP
+    doFirst {
+        println cantonalDataBaseUrl + cantonalLogosDataFile
+    }
+    description = "Download kantonale Logos."
+    src cantonalDataBaseUrl + cantonalLogosDataFile
+    dest pathToTempFolder
+    overwrite true
+}
+
+dbSchemas.each { dbSchema ->
+    def schema = dbSchema.toString()
+    task "importCantonalLogos_$schema"(type: Ili2pgReplace, dependsOn: "downloadCantonalLogos") {
+        group = GROUP
+        description = "Import der kantonalen Logos in das $schema Schema"
+        database = [dbUriOerebV2, dbUserOerebV2, dbPwdOerebV2]
+        dbschema = schema
+        dataset = cantonalLogosDataSet
+        models = iliModelKonfiguration
+        dataFile = file(Paths.get(pathToTempFolder.toString(), cantonalLogosDataFile))
+        disableValidation = true
+        importBid = true
+        importTid = true
+    }
+}
+
+task importCantonalLogos() {
+    group = GROUP
+    description = "Aggregationstask für Import der kantonalen Logos."
+    mustRunAfter "importCantonalThemes"
+
+    dependsOn {
+        tasks.findAll { task -> task.name.startsWith('importCantonalLogos_') }
+    }    
+}
+
+// Kantonale Texte
+task downloadCantonalText(type: Download) {
+    group = GROUP
+    doFirst {
+        println cantonalDataBaseUrl + cantonalTextDataFile
+    }
+    description = "Download kantonale Texte."
+    src cantonalDataBaseUrl + cantonalTextDataFile
+    dest pathToTempFolder
+    overwrite true
+}
+
+dbSchemas.each { dbSchema ->
+    def schema = dbSchema.toString()
+    task "importCantonalText_$schema"(type: Ili2pgReplace, dependsOn: "downloadCantonalText") {
+        group = GROUP
+        description = "Import der kantonalen Text in das $schema Schema"
+        database = [dbUriOerebV2, dbUserOerebV2, dbPwdOerebV2]
+        dbschema = schema
+        dataset = cantonalTextDataSet
+        models = iliModelKonfiguration
+        dataFile = file(Paths.get(pathToTempFolder.toString(), cantonalTextDataFile))
+        disableValidation = true
+        importBid = true
+        importTid = true
+    }
+}
+
+task importCantonalText() {
+    group = GROUP
+    description = "Aggregationstask für Import der kantonalen Texte."
+    mustRunAfter "importCantonalLogos"
+
+    dependsOn {
+        tasks.findAll { task -> task.name.startsWith('importCantonalText_') }
+    }    
+}
+
+// Verfügbarkeit
+task downloadAvailability(type: Download) {
+    group = GROUP
+    doFirst {
+        println cantonalDataBaseUrl + availabilityDataFile
+    }
+    description = "Download Verfügbarkeit."
+    src cantonalDataBaseUrl + availabilityDataFile
+    dest pathToTempFolder
+    overwrite true
+}
+
+dbSchemas.each { dbSchema ->
+    def schema = dbSchema.toString()
+    task "importAvailability_$schema"(type: Ili2pgReplace, dependsOn: "downloadAvailability") {
+        group = GROUP
+        description = "Import der Verfügbarkeit in das $schema Schema"
+        database = [dbUriOerebV2, dbUserOerebV2, dbPwdOerebV2]
+        dbschema = schema
+        dataset = availabilityDataSet
+        models = iliModelKonfiguration
+        dataFile = file(Paths.get(pathToTempFolder.toString(), availabilityDataFile))
+        disableValidation = true
+        importBid = true
+        importTid = true
+    }
+}
+
+task importAvailability() {
+    group = GROUP
+    description = "Aggregationstask für Import der Verfügbarkeit."
+    mustRunAfter "importCantonalText"
+
+    dependsOn {
+        tasks.findAll { task -> task.name.startsWith('importAvailability_') }
+    }    
+}
+
+// Grundbuchkreise
+task downloadSubunitOfLandRegister(type: Download) {
+    group = GROUP
+    doFirst {
+        println cantonalDataBaseUrl + subunitOfLandRegisterDataFile
+    }
+    description = "Download Verfügbarkeit."
+    src cantonalDataBaseUrl + subunitOfLandRegisterDataFile
+    dest pathToTempFolder
+    overwrite true
+}
+
+dbSchemas.each { dbSchema ->
+    def schema = dbSchema.toString()
+    task "importSubunitOfLandRegister_$schema"(type: Ili2pgReplace, dependsOn: "downloadSubunitOfLandRegister") {
+        group = GROUP
+        description = "Import der Verfügbarkeit in das $schema Schema"
+        database = [dbUriOerebV2, dbUserOerebV2, dbPwdOerebV2]
+        dbschema = schema
+        dataset = subunitOfLandRegisterDataSet
+        models = iliModelKonfiguration
+        dataFile = file(Paths.get(pathToTempFolder.toString(), subunitOfLandRegisterDataFile))
+        disableValidation = true
+        importBid = true
+        importTid = true
+    }
+}
+
+task importSubunitOfLandRegister() {
+    group = GROUP
+    description = "Aggregationstask für Import der Grundbuchkreise."
+    mustRunAfter "importAvailability"
+
+    dependsOn {
+        tasks.findAll { task -> task.name.startsWith('importSubunitOfLandRegister_') }
+    }    
+}
+
+task importData() {
+    group = GROUP
+    description = "Importiert sämtliche notwendigen kantonalen Konfigurationen, Gesetze, Logos, Texte etc."
+    dependsOn "importResponsibleOffices", "importCantonalLegalBasis", "importCantonalThemes",
+        "importCantonalLogos", "importCantonalText", "importAvailability", "importSubunitOfLandRegister"
+    mustRunAfter ":oereb_bundeskonfiguration:importData"    
+}
