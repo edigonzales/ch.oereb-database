@@ -1,0 +1,89 @@
+name: ch.oereb-database
+
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+
+  make-docker-image:
+    name: Build docker image for oereb db
+
+    env:
+      DOCKER_ACCOUNT: edigonzales
+      DOCKER_REPO: oereb-database
+      VERSION_MAJOR: "2"
+
+      # DOCKER_PASSWORD: ${{secrets.DOCKER_PASSWORD}}
+      # DOCKER_USERNAME: ${{secrets.DOCKER_USERNAME}} 
+
+    runs-on: ubuntu-22.04
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Create sql
+        run: |
+          curl -Ls https://sh.jbang.dev | bash -s - create_schema_sql.java
+          ls -la
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: setup.sql
+          path: setup.sql
+
+      - name: Set up QEMU for amd64 and arm64
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.DOCKER_ACCOUNT }}/${{ env.DOCKER_REPO }}
+          labels: |
+            org.opencontainers.image.title=${{ env.DOCKER_REPO }}
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.base.name=docker.io/bitnami/postgresql:15.3.0
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        if: ${{ (github.ref == 'refs/heads/main') && (github.event_name != 'pull_request') && !env.ACT }}
+
+      - name: Multi-platform build and push to Docker Container Registry and Github Container Registry
+        uses: docker/build-push-action@v2
+        with:
+          platforms: linux/amd64,linux/arm64
+          context: .
+          file: Dockerfile
+          labels: ${{ steps.meta.outputs.labels }}
+          pull: true
+          push: ${{ (github.ref == 'refs/heads/main') && (github.event_name != 'pull_request') && !env.ACT }}
+          tags: |
+            ghcr.io/${{ env.DOCKER_ACCOUNT }}/${{ env.DOCKER_REPO }}:latest
+            ghcr.io/${{ env.DOCKER_ACCOUNT }}/${{ env.DOCKER_REPO }}:${{ env.VERSION }}
+
+
+
